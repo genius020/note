@@ -363,7 +363,7 @@ These assumptions by the compiler lead to:
 
 # Prototypes
 
-# Giving the Compiler Information About Functions
+## Giving the Compiler Information About Functions
 
 ## Two Ways to Inform the Compiler
 
