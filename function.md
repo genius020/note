@@ -152,3 +152,209 @@ int x = print_number(3);             // ERROR! x gets garbage value!
 6. You can safely **discard** return values from true functions
 7. **Never** use void functions in expressions - this causes unpredictable garbage values
 8. Modern compilers help catch return-type errors
+
+<img width="874" height="303" alt="image" src="https://github.com/user-attachments/assets/1fd59d0e-0a7d-4e2b-b4ef-0091b3e7976a" />
+
+## The Compiler's Challenge
+
+When the compiler encounters a call to a function, it needs to generate code to: 
+1. **Pass the arguments** to the function
+2. **Call the function** itself
+3. **Receive the value** (if any) that the function sends back
+
+But here's the critical question: **How does the compiler know what kinds of arguments (and how many) the function expects, and what kind of value (if any) the function returns?**
+
+## What Happens Without Specific Information
+
+If there **isn't any specific information** given about the function, the compiler makes **dangerous assumptions**:
+
+### Assumption #1: Arguments Are Correct
+The compiler **assumes** that the call has the correct number and types of arguments. It trusts you completely without checking! 
+
+### Assumption #2: Returns an Integer
+The compiler **assumes** that the function will return an **integer**, which usually leads to **errors** for functions that return non-integral types (like `float`, `double`, `char*`, etc.).
+
+## Example: The Problem Without Function Information
+
+```c
+#include <stdio.h>
+
+int main()
+{
+    // Compiler has NO information about square() function yet
+    int result = square(5);  
+    // Compiler assumes:  square returns int, takes whatever arguments given
+    
+    printf("Result: %d\n", result);
+    return 0;
+}
+
+// Actual function defined later
+double square(double num)  // Actually returns double!
+{
+    return num * num;
+}
+```
+
+**What goes wrong:**
+- The compiler assumed `square()` returns `int`
+- But it actually returns `double`
+- This mismatch causes **incorrect results** or **garbage values**
+
+## Example: Wrong Number of Arguments
+
+```c
+#include <stdio.h>
+
+int main()
+{
+    // Compiler has no info about add() function
+    int sum = add(5);  // Called with 1 argument
+    // Compiler assumes this is correct! 
+    
+    printf("Sum:  %d\n", sum);
+    return 0;
+}
+
+// Actual function expects 2 arguments! 
+int add(int a, int b)
+{
+    return a + b;  // What value is b?  Garbage!
+}
+```
+
+**What goes wrong:**
+- The function expects **2 arguments** (`a` and `b`)
+- But we called it with only **1 argument**
+- The second parameter `b` gets a **garbage value** from memory
+- The compiler didn't warn us because it had no information! 
+
+## Example: Wrong Return Type
+
+```c
+#include <stdio.h>
+
+int main()
+{
+    // Compiler assumes get_pi() returns int
+    int value = get_pi();
+    printf("Pi as int: %d\n", value);  // Wrong! 
+    
+    // Trying to use it as double
+    double pi = get_pi();
+    printf("Pi: %f\n", pi);  // Still wrong!  Compiler already assumed int
+    
+    return 0;
+}
+
+// Actually returns double
+double get_pi()
+{
+    return 3.14159;
+}
+```
+
+**What goes wrong:**
+- Compiler assumed `get_pi()` returns `int` 
+- Actually returns `double`
+- The value gets **incorrectly interpreted** as an integer
+- Results in **completely wrong values** being used
+
+## Visual Example: The Communication Problem
+
+Think of it like ordering at a restaurant without a menu:
+
+**Without function information (no menu):**
+```
+You:  "I'll have the special!"
+Waiter: "Okay..." (assumes you want meal #1, assumes it costs $10)
+Kitchen: Actually sends meal #3, costs $25
+Result: Wrong meal, wrong bill, confusion! 
+```
+
+**With function information (with menu):**
+```
+You: "I'll have the special!"
+Waiter: (checks menu) "Which special? We have 3. They're $15, $20, and $25."
+You: "The $20 one, please."
+Kitchen: Sends correct meal
+Result: Everyone knows what to expect!
+```
+
+## Real-World Consequences
+
+### Problem 1: Incorrect Integer Assumption
+
+```c
+#include <stdio.h>
+
+int main()
+{
+    // Compiler assumes returns int
+    char *message = get_message();  
+    printf("%s\n", message);  // Crash or garbage!
+    
+    return 0;
+}
+
+char *get_message()  // Returns pointer, NOT int! 
+{
+    return "Hello, World!";
+}
+```
+
+**Result:** The pointer value gets corrupted because the compiler treated it as an integer.  This often causes **crashes** or **security vulnerabilities**.
+
+### Problem 2: Missing Argument Goes Undetected
+
+```c
+#include <stdio.h>
+
+int main()
+{
+    // Should pass 3 arguments, only passing 2
+    int result = calculate(10, 20);  // Compiler says:  "Looks fine to me!"
+    printf("Result:  %d\n", result);
+    
+    return 0;
+}
+
+int calculate(int a, int b, int c)  // Expects 3 arguments!
+{
+    return a + b + c;  // c has garbage value!
+}
+```
+
+**Result:** The third parameter contains **unpredictable garbage**, leading to **wrong calculations** and **hard-to-find bugs**.
+
+### Problem 3: Type Mismatch
+
+```c
+#include <stdio.h>
+
+int main()
+{
+    // Passing int, but function expects double
+    int result = compute(5);  // Compiler assumes this is OK
+    printf("Result: %d\n", result);
+    
+    return 0;
+}
+
+double compute(double x)  // Expects double
+{
+    return x * 2.5;
+}
+```
+
+**Result:** Argument type mismatch may cause **incorrect conversions** and **wrong results**.
+
+## Why This Matters
+
+These assumptions by the compiler lead to: 
+
+1. **Runtime errors** - Programs crash unexpectedly
+2. **Wrong results** - Calculations produce incorrect values
+3. **Security vulnerabilities** - Memory corruption and exploits
+4. **Hard-to-debug problems** - The error happens far from its cause
+5. **Unpredictable behavior** - Works on one system, fails on another
