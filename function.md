@@ -1,4 +1,5 @@
 <img width="844" height="801" alt="image" src="https://github.com/user-attachments/assets/2ce211d9-5655-42a6-af10-beb9f5917d5a" />
+
 # Understanding Function Returns in C
 
 ## How Functions Return
