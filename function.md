@@ -153,6 +153,8 @@ int x = print_number(3);             // ERROR! x gets garbage value!
 7. **Never** use void functions in expressions - this causes unpredictable garbage values
 8. Modern compilers help catch return-type errors
 
+# Function Declaration
+
 <img width="874" height="303" alt="image" src="https://github.com/user-attachments/assets/1fd59d0e-0a7d-4e2b-b4ef-0091b3e7976a" />
 
 ## The Compiler's Challenge
