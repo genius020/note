@@ -360,3 +360,370 @@ These assumptions by the compiler lead to:
 3. **Security vulnerabilities** - Memory corruption and exploits
 4. **Hard-to-debug problems** - The error happens far from its cause
 5. **Unpredictable behavior** - Works on one system, fails on another
+
+# Prototypes
+
+# Giving the Compiler Information About Functions
+
+## Two Ways to Inform the Compiler
+
+It's safer to give the compiler **specific information** about functions.  There are **two different ways** to do this:
+
+### Method 1: Define the Function Earlier in the Same File
+
+If the **definition** for the function appears **earlier** in the same source file (before it's called), the compiler will remember:
+- The **number** of arguments
+- The **types** of arguments  
+- The **type** of the return value
+
+The compiler can then **check all subsequent calls** to the function (in that source file) to make sure they are correct.
+
+**Example:**
+
+```c
+#include <stdio.h>
+
+// Function DEFINED first
+double get_pi()
+{
+    return 3.14159;
+}
+
+int main()
+{
+    // Now compiler knows get_pi() returns double
+    double pi = get_pi();  // ✓ Correct! 
+    printf("Pi: %f\n", pi);
+    
+    // If we make a mistake:
+    // int x = get_pi(5);  // ✗ Compiler catches error:  wrong number of arguments! 
+    
+    return 0;
+}
+```
+
+#### Important Warning About Old-Style Syntax
+
+If a function is defined using the **old K&R syntax** (with a separate list for argument types), then the compiler remembers **only the return value type**. **No information is saved** on the number or types of the arguments.
+
+**Old style (dangerous):**
+```c
+int *find_int(key, array, len)  // Old K&R style
+int key;
+int array[];
+int len;
+{
+    // function body
+}
+// Compiler only remembers return type (int*), NOT argument info!
+```
+
+**Because of this limitation, it is important to use the new function declaration style whenever possible.**
+
+---
+
+### Method 2: Use a Function Prototype (Better!)
+
+A **function prototype** (introduced in Chapter 1) summarizes the function declaration, giving the compiler **complete information** on how the function should be called.
+
+## What is a Function Prototype?
+
+Here's a prototype for the `find_int` function:
+
+```c
+int *find_int(int key, int array[], int len);
+```
+
+**Note the semicolon** at the end—it **distinguishes** a prototype from the beginning of a function definition.
+
+**The prototype tells the compiler:**
+1. The **number** of arguments
+2. The **type** of each argument  
+3. The **type** of the returned value
+
+After the prototype has been seen, the compiler will:
+- **Check calls** to the function to ensure arguments are correct
+- **Verify** that the returned value is used properly
+- **Convert values** to the correct type where possible (if there are mismatches)
+
+**Example:**
+
+```c
+#include <stdio.h>
+
+// Function prototype
+double get_pi(void);
+int add(int a, int b);
+
+int main()
+{
+    double pi = get_pi();  // ✓ Compiler checks this is correct
+    printf("Pi: %f\n", pi);
+    
+    int sum = add(5, 10);  // ✓ Correct call
+    printf("Sum: %d\n", sum);
+    
+    // int wrong = add(5);  // ✗ Error: too few arguments
+    // int bad = add(5, 10, 15);  // ✗ Error: too many arguments
+    
+    return 0;
+}
+
+// Function definitions
+double get_pi(void)
+{
+    return 3.14159;
+}
+
+int add(int a, int b)
+{
+    return a + b;
+}
+```
+
+## Include Parameter Names in Prototypes
+
+While **not required**, it is wise to **include descriptive parameter names** in function prototypes because they give useful information to clients calling the function.
+
+**Which prototype is more useful?**
+
+```c
+// Version 1: No parameter names (confusing)
+char *strcpy(char *, char *);
+
+// Version 2: With parameter names (clear!)
+char *strcpy(char *destination, char *source);
+```
+
+**Answer:** Version 2!  Now you know which argument is the destination and which is the source. 
+
+---
+
+## Dangerous Way to Use Prototypes ⚠️
+
+The following code illustrates a **dangerous way** to use function prototypes:
+
+```c
+void a()
+{
+    int *func(int *value, int len);  // Prototype inside function a
+    // ...  use func
+}
+
+void b()
+{
+    int func(int len, int *value);  // DIFFERENT prototype inside function b! 
+    // ... use func
+}
+```
+
+**Look closely:** The prototypes are **different**! 
+- Arguments are **reversed**
+- Return values are **different types** (`int *` vs `int`)
+
+**Why doesn't the compiler catch this error?**
+
+Each prototype is written **inside the body of a function**. They have **block scope**, so: 
+1. The compiler throws out what it learned from the first prototype at the end of function `a()`
+2. When it sees the second prototype in function `b()`, it has no memory of the first one
+3. The scopes **don't overlap**, so the compiler **never detects the mismatch**
+
+One or both prototypes are **wrong**, but the compiler never sees the contradiction—**no error messages** are produced!  This leads to **serious runtime bugs**. 
+
+---
+
+## The Preferred Way:  Use Header Files ✓
+
+```c
+// File: func.h
+#ifndef FUNC_H
+#define FUNC_H
+
+int *func(int *value, int len);  // Prototype in header file
+
+#endif
+```
+
+```c
+// File: main.c
+#include "func.h"  // Include the prototype
+
+void a()
+{
+    int array[] = {1, 2, 3};
+    int *result = func(array, 3);  // Compiler checks this call
+    // ... 
+}
+
+void b()
+{
+    int data[] = {4, 5, 6};
+    int *ptr = func(data, 3);  // Compiler checks this call too
+    // ...
+}
+```
+
+```c
+// File: func.c
+#include "func.h"  // Include prototype here too! 
+
+int *func(int *value, int len)  // Definition matches prototype
+{
+    // function implementation
+    return value;
+}
+```
+
+## Why This Technique is Better
+
+### 1. File Scope
+The prototype now has **file scope**, so **one copy** applies to the entire source file.  This is easier than writing a separate copy everywhere the function is called.
+
+#### Explaining File Scope with Example
+
+When you put a prototype **inside a function**, it only works within that function (block scope). When you put it **at the top of the file** or in a header file, it works for the **entire file** (file scope).
+
+## Without File Scope (Bad - Writing Multiple Copies)
+
+```c
+void a()
+{
+    int *func(int *value, int len);  // Prototype written here
+    int array[] = {1, 2, 3};
+    int *result = func(array, 3);
+}
+
+void b()
+{
+    int *func(int *value, int len);  // Same prototype written AGAIN here
+    int data[] = {4, 5, 6};
+    int *ptr = func(data, 3);
+}
+
+void c()
+{
+    int *func(int *value, int len);  // And AGAIN here! 
+    int nums[] = {7, 8, 9};
+    int *p = func(nums, 3);
+}
+```
+
+Notice the prototype `int *func(int *value, int len);` is **written 3 times**—once inside each function. This is tedious and error-prone (you might type it wrong!).
+
+## With File Scope (Good - Write Once, Use Everywhere)
+
+```c
+#include "func.h"  // Contains:  int *func(int *value, int len);
+
+// Now ALL functions in this file can use func()
+
+void a()
+{
+    // No prototype needed here - already available! 
+    int array[] = {1, 2, 3};
+    int *result = func(array, 3);
+}
+
+void b()
+{
+    // No prototype needed here either!
+    int data[] = {4, 5, 6};
+    int *ptr = func(data, 3);
+}
+
+void c()
+{
+    // Still no prototype needed! 
+    int nums[] = {7, 8, 9};
+    int *p = func(nums, 3);
+}
+```
+
+By including the header file once at the top, the prototype has **file scope**—it applies to the **entire source file**. All functions (`a`, `b`, and `c`) can call `func()` without needing to write the prototype again.  You write it **once**, and it works **everywhere** in that file. 
+
+### 2. No Duplicate Typing
+The prototype is only written **once**, so there's **no chance for disagreements** between multiple copies. 
+
+### 3. Easy Maintenance
+If the function definition changes: 
+- Modify the prototype **once** in the header file
+- Recompile each source file that includes it
+- All uses are automatically updated! 
+
+### 4. Compiler Verification
+If the prototype is **also #included** in the file where the function is defined, the compiler can **verify that the prototype matches the definition**.
+
+**Example showing the benefit:**
+
+```c
+// File: math_ops.h
+double calculate(double x, double y);
+
+// File: math_ops.c
+#include "math_ops.h"
+
+// If we accidentally write this: 
+int calculate(int x, int y)  // ✗ Compiler error:  conflicts with prototype!
+{
+    return x + y;
+}
+```
+
+The compiler catches the mismatch immediately!
+
+---
+
+## Special Case: Functions Without Arguments
+
+Consider this declaration—it looks **ambiguous**:
+
+```c
+int *func();
+```
+
+**Question:** Is this: 
+- An **old-style declaration** (giving only the return type)?
+- A **new-style prototype** for a function with no arguments? 
+
+**Answer:** To maintain compatibility with pre-ANSI programs, this declaration **must be interpreted as an old-style declaration**. 
+
+### Correct Way to Declare a Function With No Arguments
+
+A prototype for a function **without arguments** is written like this: 
+
+```c
+int *func(void);
+```
+
+The keyword `void` indicates that there **aren't any arguments** (not that there is one argument of type `void`).
+
+**Example:**
+
+```c
+#include <stdio.h>
+
+// Correct prototypes: 
+int get_random(void);     // No arguments
+void print_header(void);  // No arguments, no return value
+
+int main()
+{
+    print_header();
+    int num = get_random();
+    printf("Random:  %d\n", num);
+    
+    // int wrong = get_random(5);  // ✗ Error:  too many arguments!
+    
+    return 0;
+}
+
+void print_header(void)
+{
+    printf("=== My Program ===\n");
+}
+
+int get_random(void)
+{
+    return 42;  // Very random!  : )
+}
+```
