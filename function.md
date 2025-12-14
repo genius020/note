@@ -728,7 +728,7 @@ int get_random(void)
 }
 ```
 # Default Function Assumptions
-# Why Prototyping Non-Integer Functions is Critical
+## Why Prototyping Non-Integer Functions is Critical
 
 While it's recommended that **all functions be prototyped**, it is **especially important** to prototype functions that return **non-integral values** (like `float`, `double`, pointers, etc.).
 
