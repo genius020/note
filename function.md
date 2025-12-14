@@ -727,3 +727,263 @@ int get_random(void)
     return 42;  // Very random!  : )
 }
 ```
+# Default Function Assumptions
+# Why Prototyping Non-Integer Functions is Critical
+
+While it's recommended that **all functions be prototyped**, it is **especially important** to prototype functions that return **non-integral values** (like `float`, `double`, pointers, etc.).
+
+## Understanding the Problem:  Values Don't Know Their Own Type
+
+Remember that **the type of a value is not inherent in the value itself**, but rather **in the way that it is used**. 
+
+Think of it like this:  The binary bits `10110011` could represent:
+- The integer `179`
+- Part of a floating-point number
+- A character
+- Part of a pointer address
+
+The **same bits** mean different things depending on how you interpret them!
+
+## What Goes Wrong Without a Prototype
+
+If the compiler **assumes** that a function returns an integral value, it will generate **integer instructions** to manipulate the value. If the value is actually a **non-integral type** (like floating-point), the result will usually be **incorrect**.
+
+## Real Example: The Floating-Point Disaster
+
+Let's look at a concrete example of this error. 
+
+### The Function
+
+Imagine a function `xyz()` that returns the `float` value `3.14`:
+
+```c
+// Function definition (somewhere in the code)
+float xyz()
+{
+    return 3.14;
+}
+```
+
+On a Sun Sparc workstation, the bits used to represent this floating-point number `3.14` are:
+
+```
+01000000010010001111010111000011
+```
+
+These 32 bits represent `3.14` in **IEEE 754 floating-point format**.
+
+### The Problem:  Calling Without a Prototype
+
+Now assume the function is called like this, **without a prototype**:
+
+```c
+float f;
+...
+f = xyz();  // NO PROTOTYPE for xyz()!
+```
+
+### What the Compiler Does (Step-by-Step)
+
+**Step 1:** The compiler sees the call to `xyz()` but has **no prototype** telling it what type `xyz()` returns.
+
+**Step 2:** The compiler **assumes** `xyz()` returns an **integer** (the default assumption).
+
+**Step 3:** Since `f` is declared as `float`, the compiler thinks:  "I need to convert an integer to float." So it generates **integer-to-float conversion instructions**.
+
+**Step 4:** The function `xyz()` executes and returns these bits: 
+```
+01000000010010001111010111000011
+```
+
+These bits represent the float `3.14`.
+
+**Step 5:** The conversion instructions receive these bits but **interpret them as an integer**. When you interpret these bits as a 32-bit integer, you get: 
+
+```
+1,078,523,331
+```
+
+**Step 6:** The compiler's conversion instructions then convert the integer `1,078,523,331` to floating-point format, which gives approximately: 
+
+```
+1078523331.0
+```
+
+**Step 7:** This completely wrong value (`1078523331.0` instead of `3.14`) is stored in `f`.
+
+## Visual Breakdown
+
+```
+Function xyz() returns:
+    Bits: 01000000010010001111010111000011
+    Meaning: 3.14 (as float)
+             ↓
+Without prototype, compiler thinks these are INTEGER bits
+    Bits: 01000000010010001111010111000011  
+    Meaning: 1,078,523,331 (as integer)
+             ↓
+Compiler converts "integer" 1,078,523,331 to float
+    Result: 1078523331.0
+             ↓
+Stored in f:  1078523331.0  ← COMPLETELY WRONG! 
+
+Expected: 3.14
+Got: 1078523331.0
+```
+
+## Why Did This Happen?
+
+**Question:** Why was this conversion done when the value returned was **already in floating-point format**? 
+
+**Answer:** The compiler has **no way of knowing** it was already floating-point, because there was **no prototype or declaration to tell it so**.
+
+The compiler saw: 
+- "I'm getting some bits from `xyz()`"
+- "I don't have a prototype, so I'll assume it's an integer"
+- "But `f` is a float, so I need to convert integer → float"
+- "Let me interpret these bits as an integer and convert them"
+
+And that's where everything went wrong!
+
+## The Correct Way:  With a Prototype
+
+```c
+#include <stdio.h>
+
+// PROTOTYPE tells compiler: xyz() returns float
+float xyz(void);
+
+int main()
+{
+    float f;
+    f = xyz();  // Compiler knows xyz() returns float - no conversion! 
+    
+    printf("Value: %f\n", f);  // Correctly prints:  3.14
+    
+    return 0;
+}
+
+float xyz(void)
+{
+    return 3.14;
+}
+```
+
+With the prototype `float xyz(void);`, the compiler knows:
+1. `xyz()` returns a **float**
+2. The bits coming back are **already in float format**
+3. **No conversion needed** - just store them in `f` as-is
+4. Result: `f` correctly contains `3.14`
+
+## Another Example: Pointer Functions
+
+The problem is even worse with pointer functions: 
+
+```c
+#include <stdio.h>
+#include <string.h>
+
+// NO PROTOTYPE - DANGER! 
+
+int main()
+{
+    char *message;
+    message = get_greeting();  // Compiler assumes returns int! 
+    
+    printf("%s\n", message);  // CRASH or garbage! 
+    
+    return 0;
+}
+
+char *get_greeting()  // Actually returns pointer
+{
+    return "Hello, World!";
+}
+```
+
+**What happens:**
+1. `get_greeting()` returns a **pointer** (memory address)
+2. Without a prototype, compiler thinks it returns an **int**
+3. The pointer bits get **misinterpreted as an integer**
+4. On 64-bit systems, pointers are 64 bits but compiler expects 32-bit int
+5. **Half the pointer bits are lost! **
+6. When you try to use `message`, you're using a **corrupted pointer**
+7. Result: **Crash**, **garbage output**, or **security vulnerability**
+
+### With Prototype (Correct):
+
+```c
+#include <stdio.h>
+
+char *get_greeting(void);  // PROTOTYPE - tells compiler it returns char*
+
+int main()
+{
+    char *message;
+    message = get_greeting();  // Compiler knows it's a pointer!
+    
+    printf("%s\n", message);  // Works correctly:  "Hello, World!"
+    
+    return 0;
+}
+
+char *get_greeting(void)
+{
+    return "Hello, World!";
+}
+```
+
+## Real-World Demonstration
+
+Here's a complete program showing the problem:
+
+```c
+#include <stdio.h>
+
+// Uncomment the prototype to fix the problem: 
+// float calculate_pi(void);
+
+int main()
+{
+    float pi;
+    pi = calculate_pi();  // Without prototype:  disaster!
+    
+    printf("Pi value: %f\n", pi);
+    printf("Expected: 3.141593\n");
+    printf("Difference: %f\n", pi - 3.141593);
+    
+    return 0;
+}
+
+float calculate_pi(void)
+{
+    return 3.141593;
+}
+```
+
+**Without prototype:**
+```
+Pi value: 1074340347.000000
+Expected: 3.141593
+Difference: 1074340343.858407
+```
+
+**With prototype uncommented:**
+```
+Pi value: 3.141593
+Expected: 3.141593
+Difference: 0.000000
+```
+
+## Why This Matters
+
+This example illustrates why it is **vital** for functions that return values other than integers to have prototypes.  Without them: 
+
+- **Float/double functions** return garbage values (off by billions!)
+- **Pointer functions** return corrupted addresses (crashes and security holes)
+- **Long/short functions** may get truncated or sign-extended incorrectly
+- The compiler has **no way to generate the correct instructions**
+
+The bits are correct when they leave the function, but they get **completely mangled** by the incorrect conversion instructions the compiler generates when it doesn't know the real return type.
+
+Always prototype your functions, especially if they return anything other than `int`! 
