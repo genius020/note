@@ -1,8 +1,4 @@
 # Accessing Information
-## x86-64 CPU Registers:  A Detailed Explanation
-
-Let me break down how x86-64 registers work with practical examples.
-
 ## What Are These Registers?
 
 An x86-64 CPU has **16 general-purpose registers** that each hold **64 bits** (8 bytes) of data. Think of them as 16 super-fast storage compartments inside the CPU that can hold numbers or memory addresses (pointers).
