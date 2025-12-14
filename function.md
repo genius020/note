@@ -1306,7 +1306,7 @@ Short explanation:
 
 Concrete examples
 
-1) Buggy (no prototype — promotions happen)
+**1) Buggy (no prototype — promotions happen)**
 ```c
 #include <stdio.h>
 
@@ -1321,7 +1321,7 @@ void print_float(float x) {        // callee expects a float
 ```
 What goes wrong: the caller passes a double (because of promotion) but the function expects a float — the bit-level calling convention can differ, so the value received inside print_float can be wrong.
 
-2) Correct (with prototype)
+**2) Correct (with prototype)**
 ```c
 #include <stdio.h>
 
