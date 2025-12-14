@@ -987,3 +987,315 @@ This example illustrates why it is **vital** for functions that return values ot
 The bits are correct when they leave the function, but they get **completely mangled** by the incorrect conversion instructions the compiler generates when it doesn't know the real return type.
 
 Always prototype your functions, especially if they return anything other than `int`! 
+
+# Function Arguments
+
+# Understanding Function Arguments: Call by Value and Call by Reference
+
+## The Basic Rule:  Call by Value
+
+All arguments to C functions are passed with a technique known as **call by value**, which means that the function gets a **copy** of the argument value.  Thus the function may modify its parameters **without fear of affecting** the values of the arguments passed from the calling program.  This behavior is the same as value (not var) parameters in Modula and Pascal.
+
+**The rule in C is simple:  all arguments are passed by value.**
+
+## Example: Function Can Safely Destroy Its Parameters
+
+Let's look at Program 7.2, which checks whether a number has **even parity** (an even number of 1-bits):
+
+```c
+/*
+** Check the value for even parity.
+*/
+int even_parity(int value, int n_bits)
+{
+    int parity = 0;
+    
+    /*
+    ** Count the number of 1-bits in the value. 
+    */
+    while(n_bits > 0) {
+        parity += value & 1;  // Check rightmost bit
+        value >>= 1;          // Shift value right
+        n_bits -= 1;          // Decrease counter
+    }
+    
+    /*
+    ** Return TRUE if the low order bit of the count is zero
+    ** (which means that there were an even number of 1's).
+    */
+    return (parity % 2) == 0;
+}
+```
+
+**How it works:**
+- The function shifts `value` right bit by bit, checking each bit
+- It adds each rightmost bit to `parity` to count the 1-bits
+- After the loop, it checks if the count is even
+
+**The interesting feature:** This function **destroys both of its arguments** as the work progresses. The original `value` is shifted to nothing, and `n_bits` is decremented to zero. 
+
+**Why this works fine:** With call-by-value, the arguments are **copies** of the caller's values. Destroying the copies does **not affect** the original values.
+
+**Example usage:**
+
+```c
+int main()
+{
+    int number = 15;      // Binary: 1111 (four 1-bits)
+    int bits = 4;
+    
+    int result = even_parity(number, bits);
+    
+    // After the function call: 
+    printf("Number: %d\n", number);  // Still 15 - unchanged! 
+    printf("Bits: %d\n", bits);      // Still 4 - unchanged! 
+    printf("Even parity: %d\n", result);  // 1 (true - four 1's is even)
+    
+    return 0;
+}
+```
+
+Even though the function modified `value` and `n_bits` internally, the original variables `number` and `bits` in `main()` remain **unchanged** because the function only received **copies**. 
+
+## When Call by Value Doesn't Work:  The Swap Problem
+
+Program 7.3a shows a function that **tries** to exchange two values but **doesn't work**:
+
+```c
+/*
+** Exchange two integers in the calling program (doesn't work!)
+*/
+void swap(int x, int y)
+{
+    int temp;
+    
+    temp = x;
+    x = y;
+    y = temp;
+}
+```
+
+**Trying to use it:**
+
+```c
+int main()
+{
+    int a = 10;
+    int b = 20;
+    
+    printf("Before:  a=%d, b=%d\n", a, b);
+    
+    swap(a, b);  // Try to swap
+    
+    printf("After: a=%d, b=%d\n", a, b);  // Still a=10, b=20! 
+    
+    return 0;
+}
+```
+
+**Output:**
+```
+Before: a=10, b=20
+After:  a=10, b=20
+```
+
+**Why it doesn't work:** The function wants to modify the caller's arguments, but it **can't** because all it exchanges are the **copies** of the values that were sent to the function.  The original values are **untouched**.
+
+**What actually happened inside the function:**
+1.  Copies are made:  `x = 10` (copy of `a`), `y = 20` (copy of `b`)
+2. The copies are swapped: `x = 20`, `y = 10`
+3. The function ends, the copies are discarded
+4. Original `a` and `b` remain unchanged! 
+
+## The Solution: Pass Pointers (Simulating Call by Reference)
+
+To access the caller's values, you must pass **pointers** to the locations you wish to modify. The function must then use **indirection** to follow the pointers and modify the desired locations.
+
+Program 7.3b uses this technique:
+
+```c
+/*
+** Exchange two integers in the calling program. 
+*/
+void swap(int *x, int *y)  // Parameters are POINTERS
+{
+    int temp;
+    
+    temp = *x;   // Get value at address x
+    *x = *y;     // Put value from y into location x
+    *y = temp;   // Put saved value into location y
+}
+```
+
+Because the function expects **pointers** as arguments, we call it like this:
+
+```c
+int main()
+{
+    int a = 10;
+    int b = 20;
+    
+    printf("Before: a=%d, b=%d\n", a, b);
+    
+    swap(&a, &b);  // Pass ADDRESSES of a and b
+    
+    printf("After: a=%d, b=%d\n", a, b);  // Now a=20, b=10! 
+    
+    return 0;
+}
+```
+
+**Output:**
+```
+Before: a=10, b=20
+After:  a=20, b=10
+```
+
+**Why it works now:**
+1. We pass `&a` and `&b` (the **addresses** of `a` and `b`)
+2. The function receives **copies of the addresses** (pointers)
+3. Using `*x` and `*y`, the function follows the pointers to access the **original** variables
+4. The function modifies the **original** `a` and `b` through the pointers
+5. Changes are visible in the calling program! 
+
+## Arrays:  The Special Case
+
+However, if an **array name** is passed as an argument and a subscript is used on the argument in the function, then modifying array elements in the function **actually changes** the elements of the array in the calling program.  The function accesses the **very same array** that exists in the calling program; the array is **not copied**. This behavior is termed **call by reference** and is how var parameters are implemented in many other languages. 
+
+Program 7.4 demonstrates this:
+
+```c
+/*
+** Set all of the elements of an array to zero.
+*/
+void clear_array(int array[], int n_elements)
+{
+    /*
+    ** Clear the elements of the array starting with the last
+    ** and working towards the first. Note the predecrement
+    ** avoids going off the end of the array. 
+    */
+    while(n_elements > 0)
+        array[--n_elements] = 0;
+}
+```
+
+**Using the function:**
+
+```c
+int main()
+{
+    int numbers[] = {5, 10, 15, 20, 25};
+    int size = 5;
+    
+    printf("Before:\n");
+    for(int i = 0; i < size; i++)
+        printf("%d ", numbers[i]);
+    printf("\n");
+    
+    clear_array(numbers, size);  // Pass array
+    
+    printf("After:\n");
+    for(int i = 0; i < size; i++)
+        printf("%d ", numbers[i]);
+    printf("\n");
+    
+    printf("Size variable: %d\n", size);  // Still 5! 
+    
+    return 0;
+}
+```
+
+**Output:**
+```
+Before:
+5 10 15 20 25
+After:
+0 0 0 0 0
+Size variable: 5
+```
+
+**What happened:**
+- `n_elements` is a **scalar**, so it's passed by value—modifying it in the function does **not** affect the `size` variable in `main()`
+- The array `numbers` is modified—the function **does indeed** set the elements of the calling program's array to zero
+
+**Why arrays behave differently:** The value of the array name is really a **pointer**, and a copy of the pointer is passed to the function. A subscript is really a form of **indirection**, and applying indirection to the pointer accesses the locations that it points to.  The argument (the pointer) is indeed a **copy**, but the indirection uses the copy to access the **original array values**.
+
+## Visual Explanation:  Scalars vs. Arrays
+
+**Scalars (call by value):**
+```
+Calling program:        Function:
+   a = 10    ------>    x = 10 (copy)
+                        x = 20 (modify copy)
+   a = 10    <------    (original unchanged)
+```
+
+**Arrays (behave like call by reference):**
+```
+Calling program:              Function:
+   array = [5,10,15]  ------>  array (pointer to same memory)
+   Memory:  [5,10,15]           array[0] = 0
+   Memory: [0,10,15]  <------  (modifies original memory!)
+   Memory: [0, 0, 0]           array[1] = 0, array[2] = 0
+```
+
+## Array Parameters Without Size
+
+This example also illustrates another feature. It is **legal to declare array parameters without specifying a size** because memory is **not allocated** for the array elements in the function; the indirection causes the array elements in the calling program to be accessed instead. 
+
+```c
+void process_array(int array[])  // No size specified! 
+{
+    // Can work with array of any size
+}
+```
+
+Thus, a **single function can access arrays of any size**, which should excite Pascal programmers! 
+
+**However**, there isn't any way for the function to figure out the **actual size** of an array argument, so this information must also be passed explicitly if it is needed.
+
+**Example:**
+
+```c
+void print_array(int arr[], int size)  // Size passed separately
+{
+    for(int i = 0; i < size; i++)
+        printf("%d ", arr[i]);
+    printf("\n");
+}
+
+int main()
+{
+    int small[] = {1, 2, 3};
+    int large[] = {10, 20, 30, 40, 50, 60};
+    
+    print_array(small, 3);  // Same function, different sizes! 
+    print_array(large, 6);
+    
+    return 0;
+}
+```
+
+## Two Simple Rules to Remember
+
+1. **Scalar arguments** to a function are passed **by value** (function gets a copy).
+2. **Array arguments** to a function behave as though they are passed **by reference** (function accesses the original).
+
+## Old K&R Style Warning
+
+Recall that in K&R C, function parameters were declared like this:
+
+```c
+int func(a, b, c)
+int a;
+char b;
+float c;
+{
+    // ...
+}
+```
+
+Another reason to **avoid this style** is that K&R compilers handled arguments differently: `char` and `short` arguments were promoted to `int` before being passed, and `float` arguments were promoted to `double`. These conversions are called the **default argument promotions**, and because of them you will frequently see function parameters in pre-ANSI programs declared as `int` when in fact `char` values are passed.
+
+**CAUTION!** To maintain compatibility, ANSI compilers also perform these conversions for functions declared in the old style. They are **not done** on functions that have been prototyped, though, so **mixing the two styles can lead to errors**.
