@@ -125,7 +125,7 @@ The flexibility of these registers combined with established conventions allows 
 
 # Operand Specifiers
 <img width="723" height="426" alt="image" src="https://github.com/user-attachments/assets/eb790671-ce77-42f5-a9b6-48ccacf1f2ea" /> <br>
-# x86-64 Operand Types:  A Detailed Explanation
+## x86-64 Operand Types:  A Detailed Explanation
 
 In x86-64 assembly, instructions need operands - these tell the CPU where to get data (source) and where to put results (destination). Let me explain the three main types of operands with clear examples.
 
