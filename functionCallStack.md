@@ -1,4 +1,5 @@
 # Accessing Information
+<img width="723" height="824" alt="image" src="https://github.com/user-attachments/assets/8c050164-0447-4c0b-9219-30ea45cd6a2f" />
 ## What Are These Registers?
 
 An x86-64 CPU has **16 general-purpose registers** that each hold **64 bits** (8 bytes) of data. Think of them as 16 super-fast storage compartments inside the CPU that can hold numbers or memory addresses (pointers).
