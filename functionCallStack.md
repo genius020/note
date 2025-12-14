@@ -1,5 +1,5 @@
 # Accessing Information
-<img width="723" height="824" alt="image" src="https://github.com/user-attachments/assets/8c050164-0447-4c0b-9219-30ea45cd6a2f" />
+<img width="723" height="824" alt="image" src="https://github.com/user-attachments/assets/8c050164-0447-4c0b-9219-30ea45cd6a2f"/> <br>
 
 ## What Are These Registers?
 
