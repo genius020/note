@@ -1299,3 +1299,45 @@ float c;
 Another reason to **avoid this style** is that K&R compilers handled arguments differently: `char` and `short` arguments were promoted to `int` before being passed, and `float` arguments were promoted to `double`. These conversions are called the **default argument promotions**, and because of them you will frequently see function parameters in pre-ANSI programs declared as `int` when in fact `char` values are passed.
 
 **CAUTION!** To maintain compatibility, ANSI compilers also perform these conversions for functions declared in the old style. They are **not done** on functions that have been prototyped, though, so **mixing the two styles can lead to errors**.
+
+Short explanation:
+- Default argument promotions: when a function is called without a prototype, float arguments are promoted to double, and char/short are promoted to int before being passed.
+- That can break things when the called function actually expects a float (or char) because the caller and callee disagree about what was passed.
+
+Concrete examples
+
+1) Buggy (no prototype — promotions happen)
+```c
+#include <stdio.h>
+
+int main(void) {
+    print_float(3.14f); // no prototype in scope -> 3.14f is promoted to double
+    return 0;
+}
+
+void print_float(float x) {        // callee expects a float
+    printf("x = %f\n", x);        // may print garbage on some systems
+}
+```
+What goes wrong: the caller passes a double (because of promotion) but the function expects a float — the bit-level calling convention can differ, so the value received inside print_float can be wrong.
+
+2) Correct (with prototype)
+```c
+#include <stdio.h>
+
+void print_float(float x);        // prototype — prevents promotion
+
+int main(void) {
+    print_float(3.14f);           // 3.14f stays a float when passed
+    return 0;
+}
+
+void print_float(float x) {
+    printf("x = %f\n", x);        // prints 3.140000 as expected
+}
+```
+
+Short note about char/short:
+- If you call a function without a prototype and pass a char, it will be promoted to int. Usually this is harmless, but mixing styles (prototype vs old-style/no-prototype) can still cause confusion or bugs.
+
+Takeaway: always use prototypes (or declare the function before calling) so the compiler knows the exact parameter types and no unexpected promotions occur.
