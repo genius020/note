@@ -1341,3 +1341,340 @@ Short note about char/short:
 - If you call a function without a prototype and pass a char, it will be promoted to int. Usually this is harmless, but mixing styles (prototype vs old-style/no-prototype) can still cause confusion or bugs.
 
 Takeaway: always use prototypes (or declare the function before calling) so the compiler knows the exact parameter types and no unexpected promotions occur.
+
+# Basics of Functions
+## Building a Pattern-Matching Program: A Practical Example
+
+## The Problem
+
+Let's design and write a program to print each line of its input that contains a particular **"pattern"** or string of characters. This is a special case of the UNIX program called `grep`.
+
+**Example:** Searching for the pattern **"ould"** in these lines of poetry:
+
+```
+Ah Love! could you and I with Fate conspire
+To grasp this sorry Scheme of Things entire,
+Would not we shatter it to bits -- and then
+Re-mould it nearer to the Heart's Desire! 
+```
+
+Should produce this output (only lines containing "ould"):
+
+```
+Ah Love! could you and I with Fate conspire
+Would not we shatter it to bits -- and then
+Re-mould it nearer to the Heart's Desire!
+```
+
+Notice that "could", "Would", and "Re-mould" all contain the pattern "ould". 
+
+## Breaking Down the Problem
+
+The job falls neatly into **three pieces**:
+
+```
+while (there's another line)
+    if (the line contains the pattern)
+        print it
+```
+
+Although it's certainly possible to put the code for all of this in `main`, a **better way** is to use the structure to advantage by making each part a **separate function**. Three small pieces are better to deal with than one big one, because: 
+
+- **Irrelevant details** can be buried in the functions
+- The chance of **unwanted interactions** is minimized  
+- The pieces may even be **useful in other programs**
+
+## What We Need
+
+Let's look at what functions we need for each piece:
+
+1. **"While there's another line"** → We need `getline`, a function to read one line of input
+2. **"Print it"** → We already have `printf`, which someone has provided for us
+3. **"The line contains the pattern"** → We need to write this! 
+
+This means we need only write a routine to decide whether the line contains an occurrence of the pattern. 
+
+## Solving the Pattern Search Problem
+
+We can solve that problem by writing a function `strindex(s, t)` that returns the **position or index** in the string `s` where the string `t` begins, or **-1** if `s` does not contain `t`.
+
+**Why -1 for failure?** Because C arrays begin at position zero, indexes will be zero or positive, and so a negative value like -1 is convenient for signaling failure. 
+
+**Example of how `strindex` works:**
+
+```c
+strindex("could you", "ould")  → returns 1 (found at position 1)
+strindex("hello world", "wor")  → returns 6 (found at position 6)
+strindex("hello world", "xyz")  → returns -1 (not found)
+```
+
+**Benefit:** When we later need more sophisticated pattern matching, we only have to **replace strindex**; the rest of the code can remain the same.
+
+Note: The standard library provides a function `strstr` that is similar to `strindex`, except that it returns a **pointer** instead of an **index**.
+
+## The Complete Program
+
+Given this much design, filling in the details of the program is straightforward. Here is the whole thing, so you can see how the pieces fit together: 
+
+```c
+#include <stdio.h>
+
+#define MAXLINE 1000  /* maximum input line length */
+
+int getline(char line[], int max);
+int strindex(char source[], char searchfor[]);
+
+char pattern[] = "ould";  /* pattern to search for */
+
+/* find all lines matching pattern */
+main()
+{
+    char line[MAXLINE];
+    int found = 0;
+    
+    while (getline(line, MAXLINE) > 0)
+        if (strindex(line, pattern) >= 0) {
+            printf("%s", line);
+            found++;
+        }
+    return found;
+}
+
+/* getline: get line into s, return length */
+int getline(char s[], int lim)
+{
+    int c, i;
+    
+    i = 0;
+    while (--lim > 0 && (c=getchar()) != EOF && c != '\n')
+        s[i++] = c;
+    if (c == '\n')
+        s[i++] = c;
+    s[i] = '\0';
+    return i;
+}
+
+/* strindex: return index of t in s, -1 if none */
+int strindex(char s[], char t[])
+{
+    int i, j, k;
+    
+    for (i = 0; s[i] != '\0'; i++) {
+        for (j=i, k=0; t[k]!='\0' && s[j]==t[k]; j++, k++)
+            ;
+        if (k > 0 && t[k] == '\0')
+            return i;
+    }
+    return -1;
+}
+```
+
+## Understanding Each Function
+
+### The `main` Function
+
+```c
+main()
+{
+    char line[MAXLINE];
+    int found = 0;
+    
+    while (getline(line, MAXLINE) > 0)
+        if (strindex(line, pattern) >= 0) {
+            printf("%s", line);
+            found++;
+        }
+    return found;
+}
+```
+
+**What it does:**
+1. Declares a character array `line` to hold each input line
+2. Keeps a counter `found` to track how many matching lines we find
+3. **Loop:** Reads lines one at a time using `getline`
+4. **Check:** Uses `strindex` to see if the pattern exists in the line (returns >= 0 if found)
+5. **Print:** If pattern found, prints the line and increments counter
+6. **Returns:** The total number of matches found (useful for the calling environment)
+
+### The `getline` Function
+
+```c
+int getline(char s[], int lim)
+{
+    int c, i;
+    
+    i = 0;
+    while (--lim > 0 && (c=getchar()) != EOF && c != '\n')
+        s[i++] = c;
+    if (c == '\n')
+        s[i++] = c;
+    s[i] = '\0';
+    return i;
+}
+```
+
+**What it does:**
+1. Reads characters one at a time using `getchar()`
+2. Stops when it encounters: 
+   - End of file (`EOF`)
+   - A newline character (`'\n'`)
+   - The limit is reached (`lim`)
+3. If it stopped at a newline, includes the newline in the string
+4. Adds the null terminator `'\0'` at the end
+5. Returns the length of the line read
+
+**Example:**
+```
+Input:  "hello\n"
+Result: s contains "hello\n\0"
+Returns: 6
+```
+
+### The `strindex` Function
+
+```c
+int strindex(char s[], char t[])
+{
+    int i, j, k;
+    
+    for (i = 0; s[i] != '\0'; i++) {
+        for (j=i, k=0; t[k]!='\0' && s[j]==t[k]; j++, k++)
+            ;
+        if (k > 0 && t[k] == '\0')
+            return i;
+    }
+    return -1;
+}
+```
+
+**What it does:** Searches for string `t` inside string `s`.
+
+**How it works step-by-step:**
+
+Let's trace through with `s = "could"` and `t = "ould"`:
+
+```
+i=0: Check position 0
+     s[0]='c', t[0]='o' → Don't match, continue
+
+i=1: Check position 1
+     s[1]='o', t[0]='o' → Match! Continue inner loop
+     s[2]='u', t[1]='u' → Match! 
+     s[3]='l', t[2]='l' → Match!
+     s[4]='d', t[3]='d' → Match!
+     t[4]='\0' → Reached end of t, found complete match! 
+     Return i=1
+```
+
+**The inner loop logic:**
+- `j` tracks position in `s` (starts at current `i`)
+- `k` tracks position in `t` (starts at 0)
+- Continue while characters match and haven't reached end of `t`
+- After loop: if `k > 0` (matched at least one char) AND `t[k] == '\0'` (reached end of `t`), we found a complete match! 
+
+## Understanding Function Structure
+
+Each function definition has this form: 
+
+```c
+return-type function-name(argument declarations)
+{
+    declarations and statements
+}
+```
+
+Various parts may be absent.  A minimal function is:
+
+```c
+dummy() {}
+```
+
+This does nothing and returns nothing. A do-nothing function like this is sometimes useful as a **place holder** during program development. 
+
+**Note:** If the return type is omitted, `int` is assumed.
+
+## How the Program Works as a Whole
+
+A program is just a set of definitions of variables and functions. Communication between the functions is by: 
+- **Arguments** passed to functions
+- **Values returned** by the functions  
+- **External variables** (like `pattern` in our example)
+
+The functions can occur in **any order** in the source file, and the source program can be split into multiple files, so long as no function is split.
+
+## The Return Statement
+
+The `return` statement is the mechanism for returning a value from the called function to its caller. Any expression can follow return:
+
+```c
+return expression;
+```
+
+The expression will be converted to the return type of the function if necessary. Parentheses are often used around the expression, but they are optional: 
+
+```c
+return 5;           // Returns 5
+return (x + y);     // Returns sum (parentheses optional)
+return x > y ?  x : y;  // Returns larger value
+```
+
+**Important points about return:**
+
+1. The calling function is **free to ignore** the returned value
+2. There need not be an expression after `return`:
+   ```c
+   return;  // Returns no value
+   ```
+3. Control also returns to the caller with no value when execution **"falls off the end"** of the function by reaching the closing right brace
+4. It is not illegal, but probably a sign of trouble, if a function returns a value from one place and no value from another
+5. If a function fails to return a value, its "value" is certain to be **garbage**
+
+**In our program:** The pattern-searching program returns a status from `main`: the number of matches found. This value is available for use by the environment that called the program.
+
+## Running the Program
+
+**Example input** (saved in file `poem.txt`):
+```
+Ah Love! could you and I with Fate conspire
+To grasp this sorry Scheme of Things entire,
+Would not we shatter it to bits -- and then
+Re-mould it nearer to the Heart's Desire!
+```
+
+**Running the program:**
+```bash
+./a.out < poem.txt
+```
+
+**Output:**
+```
+Ah Love! could you and I with Fate conspire
+Would not we shatter it to bits -- and then
+Re-mould it nearer to the Heart's Desire! 
+```
+
+**Return value:** The program returns 3 (three matches found), which the shell can access using `echo $?` on UNIX. 
+
+## Compiling Multi-File Programs
+
+The mechanics of how to compile and load a C program that resides on multiple source files vary from one system to the next. 
+
+**On the UNIX system**, suppose the three functions are stored in three files: 
+- `main.c` (contains main function)
+- `getline.c` (contains getline function)
+- `strindex.c` (contains strindex function)
+
+**Compile all three files:**
+```bash
+cc main.c getline.c strindex.c
+```
+
+This compiles the three files, placing the resulting object code in files `main.o`, `getline.o`, and `strindex.o`, then loads them all into an executable file called `a.out`.
+
+**If there is an error** (say in `main.c`), the file can be recompiled by itself and the result loaded with the previous object files: 
+
+```bash
+cc main.c getline.o strindex.o
+```
+
+**How it works:** The `cc` command uses the `.c` versus `.o` naming convention to distinguish source files from object files.  Files ending in `.c` get compiled; files ending in `.o` are already compiled and just get linked together.
