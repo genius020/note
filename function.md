@@ -990,7 +990,7 @@ Always prototype your functions, especially if they return anything other than `
 
 # Function Arguments
 
-# Understanding Function Arguments: Call by Value and Call by Reference
+## Understanding Function Arguments: Call by Value and Call by Reference
 
 ## The Basic Rule:  Call by Value
 
