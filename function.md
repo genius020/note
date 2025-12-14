@@ -1678,3 +1678,312 @@ cc main.c getline.o strindex.o
 ```
 
 **How it works:** The `cc` command uses the `.c` versus `.o` naming convention to distinguish source files from object files.  Files ending in `.c` get compiled; files ending in `.o` are already compiled and just get linked together.
+
+# Functions Returning Non-Integer Types
+
+## The Problem
+
+So far our examples of functions have returned either no value (`void`) or an `int`. What if a function must return some other type? Many numerical functions like `sqrt`, `sin`, and `cos` return `double`; other specialized functions return other types.
+
+To illustrate how to deal with this, let's write and use the function `atof(s)`, which converts the string `s` to its **double-precision floating-point** equivalent. 
+
+## What is `atof`?
+
+`atof` is an extension of `atoi`, which we saw in earlier chapters. It handles:
+- An optional sign (`+` or `-`)
+- A decimal point
+- The presence or absence of either integer part or fractional part
+
+**Examples of what `atof` converts:**
+```
+"123"      → 123.0
+"-45.67"   → -45.67
+"3.14159"  → 3.14159
+"+0.5"     → 0.5
+"  -12.3"  → -12.3  (skips leading whitespace)
+```
+
+Note: Our version is not a high-quality input conversion routine; that would take more space than we care to use.  The standard library includes an `atof`; the header `<stdlib.h>` declares it.
+
+## Writing the `atof` Function
+
+First, `atof` itself must **declare the type of value it returns**, since it is not `int`. The type name **precedes the function name**:
+
+```c
+#include <ctype.h>
+
+/* atof: convert string s to double */
+double atof(char s[])
+{
+    double val, power;
+    int i, sign;
+    
+    for (i = 0; isspace(s[i]); i++)  /* skip white space */
+        ;
+    
+    sign = (s[i] == '-') ? -1 : 1;
+    if (s[i] == '+' || s[i] == '-')
+        i++;
+    
+    for (val = 0.0; isdigit(s[i]); i++)
+        val = 10.0 * val + (s[i] - '0');
+    
+    if (s[i] == '.')
+        i++;
+    
+    for (power = 1.0; isdigit(s[i]); i++) {
+        val = 10.0 * val + (s[i] - '0');
+        power *= 10;
+    }
+    
+    return sign * val / power;
+}
+```
+
+### Understanding How `atof` Works
+
+Let's trace through with the string `"-12.34"`:
+
+**Step 1: Skip whitespace**
+```c
+for (i = 0; isspace(s[i]); i++)
+```
+No whitespace here, so `i` stays at 0.
+
+**Step 2: Check for sign**
+```c
+sign = (s[i] == '-') ? -1 : 1;  // s[0] is '-', so sign = -1
+if (s[i] == '+' || s[i] == '-')
+    i++;  // Move past the sign, i becomes 1
+```
+
+**Step 3: Process integer part**
+```c
+for (val = 0.0; isdigit(s[i]); i++)
+    val = 10.0 * val + (s[i] - '0');
+```
+- `i=1`: `s[1]='1'` → `val = 10.0 * 0.0 + 1 = 1.0`
+- `i=2`: `s[2]='2'` → `val = 10.0 * 1.0 + 2 = 12.0`
+- `i=3`: `s[3]='.'` → Not a digit, exit loop
+
+**Step 4: Process decimal point**
+```c
+if (s[i] == '.')
+    i++;  // Skip the '. ', i becomes 4
+```
+
+**Step 5: Process fractional part**
+```c
+for (power = 1.0; isdigit(s[i]); i++) {
+    val = 10.0 * val + (s[i] - '0');
+    power *= 10;
+}
+```
+- `i=4`: `s[4]='3'` → `val = 10.0 * 12.0 + 3 = 123.0`, `power = 10. 0`
+- `i=5`: `s[5]='4'` → `val = 10.0 * 123.0 + 4 = 1234.0`, `power = 100.0`
+- `i=6`: `s[6]='\0'` → Not a digit, exit loop
+
+**Step 6: Calculate final result**
+```c
+return sign * val / power;
+// return -1 * 1234.0 / 100.0 = -12.34
+```
+
+## Using `atof` in a Program
+
+Second, and just as important, the **calling routine must know** that `atof` returns a non-`int` value. One way to ensure this is to **declare `atof` explicitly** in the calling routine. 
+
+Here's a primitive calculator (barely adequate for checkbook balancing) which reads one number per line, optionally preceded with a sign, and adds them up, printing the running sum after each input:
+
+```c
+#include <stdio.h>
+
+#define MAXLINE 100
+
+/* rudimentary calculator */
+main()
+{
+    double sum, atof(char []);
+    char line[MAXLINE];
+    int getline(char line[], int max);
+    
+    sum = 0;
+    while (getline(line, MAXLINE) > 0)
+        printf("\t%g\n", sum += atof(line));
+    return 0;
+}
+```
+
+### Understanding the Declaration
+
+The declaration: 
+```c
+double sum, atof(char []);
+```
+
+This says two things:
+1. `sum` is a `double` variable
+2. `atof` is a function that takes one `char[]` argument and returns a `double`
+
+### Example of the Calculator Running
+
+**Input:**
+```
+25.50
+-10.25
+15.75
+-5.00
+```
+
+**Output:**
+```
+    25.5
+    15.25
+    31
+    26
+```
+
+The program keeps a running total, adding each number to the sum and printing the result.
+
+## Why Type Declarations Matter
+
+The function `atof` must be **declared and defined consistently**. 
+
+### Case 1: Same Source File
+If `atof` itself and the call to it in `main` have inconsistent types in the **same source file**, the error will be **detected by the compiler**. 
+
+```c
+// This will cause a compiler error
+double atof(char s[]);  // Declared as returning double
+
+int atof(char s[])      // Defined as returning int - ERROR!
+{
+    // ... 
+}
+```
+
+### Case 2: Separate Compilation (The Dangerous Case!)
+
+But if (as is more likely) `atof` were compiled **separately**, the mismatch would **not be detected**.  `atof` would return a `double` that `main` would treat as an `int`, and **meaningless answers** would result.
+
+**Example of the problem:**
+
+**File:  atof.c**
+```c
+#include <ctype.h>
+
+double atof(char s[])  // Returns double
+{
+    // ...  implementation returning 3.14
+    return 3.14;
+}
+```
+
+**File: main.c**
+```c
+#include <stdio.h>
+
+main()
+{
+    char str[] = "3.14";
+    int result;
+    
+    // NO DECLARATION - compiler assumes atof returns int! 
+    result = atof(str);
+    
+    printf("Result: %d\n", result);  // Garbage! 
+}
+```
+
+**What happens:**
+1. `atof` returns `3.14` as a `double` (64 bits of floating-point data)
+2. `main` expects an `int` (32 bits of integer data)
+3. The bits get **misinterpreted** - you get garbage instead of 3! 
+
+## The Danger of Implicit Declarations
+
+In the light of what we have said about how declarations must match definitions, this might seem surprising. The reason a mismatch can happen is that **if there is no function prototype**, a function is **implicitly declared** by its first appearance in an expression, such as:
+
+```c
+sum += atof(line)
+```
+
+If a name that has not been previously declared occurs in an expression and is followed by a left parenthesis, it is **declared by context** to be a function name.  The compiler makes these assumptions:
+- The function is assumed to return **`int`**
+- **Nothing is assumed** about its arguments
+
+### The Empty Argument List Problem
+
+Furthermore, if a function declaration does not include arguments, as in: 
+
+```c
+double atof();  // Empty parentheses
+```
+
+That too is taken to mean that **nothing is to be assumed** about the arguments of `atof`; all parameter checking is **turned off**. 
+
+This special meaning of the empty argument list is intended to permit **older C programs** to compile with new compilers. But it's a **bad idea** to use it with new C programs. 
+
+**Rule:** 
+- If the function takes arguments, **declare them**
+- If it takes no arguments, use **`void`**
+
+**Good declarations:**
+```c
+double atof(char s[]);     // Takes char array
+int rand(void);             // Takes no arguments
+```
+
+**Bad declaration (old style):**
+```c
+double atof();  // Don't do this in new code!
+```
+
+## Writing `atoi` Using `atof`
+
+Given `atof`, properly declared, we could write `atoi` (convert a string to `int`) in terms of it:
+
+```c
+/* atoi: convert string s to integer using atof */
+int atoi(char s[])
+{
+    double atof(char s[]);
+    
+    return (int) atof(s);
+}
+```
+
+### Understanding the Type Conversion
+
+Notice the structure of the declarations and the return statement. The value of the expression in: 
+
+```c
+return expression;
+```
+
+is **converted to the type of the function** before the return is taken. Therefore, the value of `atof`, a `double`, is converted automatically to `int` when it appears in this return, since the function `atoi` returns an `int`.
+
+**Example:**
+```c
+atoi("45.78")
+```
+
+**What happens:**
+1. Call `atof("45.78")` which returns `45.78` (as `double`)
+2. Convert `45.78` to `int` → `45` (fractional part discarded)
+3. Return `45`
+
+### The Cast Operation
+
+This operation does **potentially discard information** (the `.78` part), however, so some compilers warn of it. The cast `(int)` states **explicitly** that the operation is intended, and **suppresses any warning**. 
+
+```c
+return (int) atof(s);  // Cast makes intention clear
+```
+
+Without the cast, you might get a warning: 
+```
+warning: implicit conversion from 'double' to 'int' may lose precision
+```
+
+With the cast, the compiler knows you intentionally want to convert and discard the fractional part. 
