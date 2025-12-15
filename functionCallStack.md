@@ -404,7 +404,7 @@ Every addressing mode is just a special case of the most general form `Imm(rb, r
 Understanding these addressing modes is crucial for reading assembly code, especially when dealing with arrays and structures, which you'll see extensively when the text covers data structures and procedure implementations. 
 
 # Data Movement Instructions
-# Data Movement Instructions in x86-64:  A Detailed Explanation
+## Data Movement Instructions in x86-64:  A Detailed Explanation
 
 Data movement instructions are among the most frequently used in assembly programming.  They copy data from one location to another.  Let me explain the different types with comprehensive examples.
 
