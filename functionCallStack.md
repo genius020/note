@@ -576,6 +576,218 @@ Regular `movq` has a limitation: immediate values must fit in 32 bits (as signed
 movq $0x123456789ABCDEF0, %rax    # ERROR!  Too large for regular movq
 ```
 
+## Understanding movq Immediate Value Limitations
+
+Let me explain this limitation clearly with examples.
+
+## The Basic Problem
+
+The regular `movq` instruction has a restriction when using immediate (constant) values:  **The immediate value must fit within 32 bits as a signed number.**
+
+## What Does "32-bit Two's-Complement" Mean?
+
+In 32-bit two's-complement representation, you can represent numbers in this range:
+- **Minimum:** -2,147,483,648 (which is -2³¹)
+- **Maximum:** +2,147,483,647 (which is 2³¹ - 1)
+
+In hexadecimal:
+- **Range:** `0x80000000` to `0x7FFFFFFF` (when interpreted as signed)
+
+## How Sign Extension Works
+
+When you use `movq` with an immediate value that fits in 32 bits, the CPU:
+1. Takes your 32-bit value
+2. Looks at the most significant bit (MSB) - the sign bit
+3. Extends it to 64 bits by copying the sign bit to all upper 32 bits
+
+**If MSB = 0 (positive):** Fill upper 32 bits with zeros  
+**If MSB = 1 (negative):** Fill upper 32 bits with ones
+
+---
+
+## Examples That Work with Regular movq
+
+### Example 1: Small Positive Number
+```assembly
+movq $100, %rax
+```
+
+**Process:**
+- 100 in 32-bit:  `0x00000064`
+- MSB = 0 (positive)
+- Sign extend to 64 bits: `0x0000000000000064`
+
+**Result:** `%rax = 0x0000000000000064` ✅
+
+---
+
+### Example 2: Larger Positive Number
+```assembly
+movq $0x7FFFFFFF, %rax    # 2,147,483,647 (max positive 32-bit)
+```
+
+**Process:**
+- 32-bit value: `0x7FFFFFFF`
+- MSB = 0 (bit 31 is 0, so positive)
+- Sign extend: `0x000000007FFFFFFF`
+
+**Result:** `%rax = 0x000000007FFFFFFF` ✅
+
+---
+
+### Example 3: Negative Number
+```assembly
+movq $-1, %rax
+```
+
+**Process:**
+- -1 in 32-bit two's-complement: `0xFFFFFFFF`
+- MSB = 1 (negative)
+- Sign extend by copying the 1 bit:  `0xFFFFFFFFFFFFFFFF`
+
+**Result:** `%rax = 0xFFFFFFFFFFFFFFFF` ✅
+
+This correctly represents -1 in 64-bit! 
+
+---
+
+### Example 4: Another Negative Number
+```assembly
+movq $-100, %rax
+```
+
+**Process:**
+- -100 in 32-bit two's-complement: `0xFFFFFF9C`
+- MSB = 1 (negative)
+- Sign extend: `0xFFFFFFFFFFFFFF9C`
+
+**Result:** `%rax = 0xFFFFFFFFFFFFFF9C` ✅
+
+This correctly represents -100 in 64-bit!
+
+---
+
+### Example 5: Small Negative Number
+```assembly
+movq $-2147483648, %rax    # Minimum 32-bit signed value
+```
+
+**Process:**
+- -2,147,483,648 in 32-bit: `0x80000000`
+- MSB = 1 (negative)
+- Sign extend: `0xFFFFFFFF80000000`
+
+**Result:** `%rax = 0xFFFFFFFF80000000` ✅
+
+---
+
+## Examples That DON'T Work with Regular movq
+
+### Example 6: Large Positive Number (Too Big!)
+```assembly
+movq $0x123456789ABCDEF0, %rax    # ❌ ERROR!
+```
+
+**Problem:**
+- This value is `0x123456789ABCDEF0`
+- This requires more than 32 bits to represent
+- The upper part `0x12345678` doesn't fit in 32 bits
+- **This will cause an assembler error! **
+
+---
+
+### Example 7: Value Just Beyond 32-bit Range
+```assembly
+movq $0x80000000, %rax    # ❌ Doesn't work as you might expect! 
+```
+
+**Problem:**
+- You might want:  `%rax = 0x0000000080000000` (2,147,483,648 unsigned)
+- But `0x80000000` in 32-bit two's-complement is **-2,147,483,648** (MSB=1)
+- Sign extension gives:  `%rax = 0xFFFFFFFF80000000` (negative number!)
+
+**This is legal, but might not do what you want if you intended an unsigned value.**
+
+---
+
+### Example 8: Medium-Large Positive Number
+```assembly
+movq $0x100000000, %rax    # ❌ ERROR!
+```
+
+**Problem:**
+- This is 2³² = 4,294,967,296
+- Needs 33 bits to represent as a positive number
+- Cannot fit in 32-bit signed range
+- **Assembler error!**
+
+---
+
+## Visual Comparison
+
+| Value You Want | Can Use movq?  | Why?  |
+|----------------|---------------|------|
+| `0x00000000FFFFFFFF` | ❌ No | Would need to represent 4,294,967,295, which is > 2³¹-1 |
+| `0x000000007FFFFFFF` | ✅ Yes | 2,147,483,647 fits in 32-bit signed |
+| `0x0000000080000000` | ❌ No | Can't represent as positive; movq would interpret as negative and extend to `0xFFFFFFFF80000000` |
+| `0xFFFFFFFFFFFFFFFF` | ✅ Yes | Use movq $-1, which sign-extends correctly |
+| `0x123456789ABCDEF0` | ❌ No | Far too large for 32 bits |
+
+---
+
+## The Solution: movabsq
+
+When you need a full 64-bit immediate value, use `movabsq`:
+
+```assembly
+movabsq $0x123456789ABCDEF0, %rax    # ✅ Works!
+```
+
+**Result:** `%rax = 0x123456789ABCDEF0`
+
+No sign extension, no limitations - the full 64-bit value is loaded directly. 
+
+---
+
+## Practical Examples
+
+### Scenario 1: Setting up a pointer to high memory
+```assembly
+# Won't work: 
+movq $0x7FFFFFFFFFFF, %rax    # ❌ Too large! 
+
+# Must use:
+movabsq $0x7FFFFFFFFFFF, %rax    # ✅ Correct
+```
+
+---
+
+### Scenario 2: Loading a bit pattern
+```assembly
+# Want: %rax = 0x00000000FFFFFFFF (all lower 32 bits set)
+
+# Won't work as intended:
+movq $0xFFFFFFFF, %rax    # ❌ Gives 0xFFFFFFFFFFFFFFFF (sign extended!)
+
+# Must use:
+movabsq $0x00000000FFFFFFFF, %rax    # ✅ Correct
+
+# OR use this trick:
+movl $0xFFFFFFFF, %eax    # ✅ Also works!  (zeros upper 32 bits)
+```
+
+---
+
+### Scenario 3: Small values always work
+```assembly
+movq $0, %rax           # ✅ %rax = 0x0000000000000000
+movq $100, %rax         # ✅ %rax = 0x0000000000000064
+movq $-50, %rax         # ✅ %rax = 0xFFFFFFFFFFFFFFCE
+movq $0x7FFFFFFF, %rax  # ✅ %rax = 0x000000007FFFFFFF
+```
+
+---
+
 The `movabsq` instruction solves this: 
 - Can have any arbitrary 64-bit immediate value
 - Destination must be a register (cannot be memory)
