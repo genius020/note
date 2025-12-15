@@ -403,3 +403,404 @@ Every addressing mode is just a special case of the most general form `Imm(rb, r
 
 Understanding these addressing modes is crucial for reading assembly code, especially when dealing with arrays and structures, which you'll see extensively when the text covers data structures and procedure implementations. 
 
+# Data Movement Instructions
+# Data Movement Instructions in x86-64:  A Detailed Explanation
+
+Data movement instructions are among the most frequently used in assembly programming.  They copy data from one location to another.  Let me explain the different types with comprehensive examples.
+
+## The MOV Class:  Basic Data Movement
+
+The MOV class consists of four instructions that differ only in the size of data they move:
+
+- **movb**: Move **byte** (1 byte = 8 bits)
+- **movw**: Move **word** (2 bytes = 16 bits)
+- **movl**: Move **long/double word** (4 bytes = 32 bits)
+- **movq**: Move **quad word** (8 bytes = 64 bits)
+
+These instructions copy data from source to destination without any transformation. 
+
+### Operand Rules
+
+**Source operand** can be:
+1.  Immediate (constant value)
+2. Register
+3. Memory
+
+**Destination operand** can be:
+1. Register
+2. Memory
+
+**Critical restriction:** Both operands CANNOT be memory at the same time. You cannot do `movq memory1, memory2` directly.  You must use two instructions:
+```assembly
+movq memory1, %rax      # Load from memory to register
+movq %rax, memory2      # Store from register to memory
+```
+
+### Register Size Matching
+
+The register size must match the instruction suffix:
+- `movb` uses 8-bit registers:  `%al, %bl, %cl, %dl, %sil, %dil, %spl, %bpl, %r8b-%r15b`
+- `movw` uses 16-bit registers: `%ax, %bx, %cx, %dx, %si, %di, %sp, %bp, %r8w-%r15w`
+- `movl` uses 32-bit registers: `%eax, %ebx, %ecx, %edx, %esi, %edi, %esp, %ebp, %r8d-%r15d`
+- `movq` uses 64-bit registers: `%rax, %rbx, %rcx, %rdx, %rsi, %rdi, %rsp, %rbp, %r8-%r15`
+
+---
+
+## How MOV Instructions Affect Destination Registers
+
+This is crucial to understand:
+
+### General Rule: 
+MOV instructions update ONLY the bytes specified by the destination operand, **except for one special case.**
+
+### The Exception:
+When `movl` (32-bit move) has a **register** as the destination, it sets the upper 4 bytes (high-order 32 bits) to zero.  This is an x86-64 convention:  any instruction generating a 32-bit value in a register automatically zeros the upper 32 bits.
+
+### Detailed Example: 
+
+```assembly
+movabsq $0x0011223344556677, %rax    # %rax = 0011223344556677
+movb $-1, %al                         # %rax = 00112233445566FF
+movw $-1, %ax                         # %rax = 001122334455FFFF
+movl $-1, %eax                        # %rax = 00000000FFFFFFFF
+movq $-1, %rax                        # %rax = FFFFFFFFFFFFFFFF
+```
+
+Let me break this down step by step:
+
+**Line 1:** Initialize `%rax` with the 64-bit pattern `0x0011223344556677`
+```
+%rax = 00 11 22 33 44 55 66 77
+       [byte7.... byte1 byte0]
+```
+
+**Line 2:** `movb $-1, %al` 
+- `-1` in 8-bit hexadecimal is `0xFF` (all bits set to 1)
+- Only modifies the lowest byte (`%al`)
+- Other bytes remain unchanged
+```
+%rax = 00 11 22 33 44 55 66 FF
+                          ^^ changed
+```
+
+**Line 3:** `movw $-1, %ax`
+- `-1` in 16-bit hexadecimal is `0xFFFF`
+- Modifies the lowest 2 bytes (`%ax`)
+- Other bytes remain unchanged
+```
+%rax = 00 11 22 33 44 55 FF FF
+                       ^^^^^ changed
+```
+
+**Line 4:** `movl $-1, %eax`
+- `-1` in 32-bit hexadecimal is `0xFFFFFFFF`
+- Modifies the lowest 4 bytes (`%eax`)
+- **SPECIAL:  Upper 4 bytes are zeroed** (this is the exception!)
+```
+%rax = 00 00 00 00 FF FF FF FF
+       ^^^^^^^^^^^ zeroed! 
+       ^^^^^^^^^^^ changed
+```
+
+**Line 5:** `movq $-1, %rax`
+- `-1` in 64-bit hexadecimal is `0xFFFFFFFFFFFFFFFF`
+- Modifies all 8 bytes
+```
+%rax = FF FF FF FF FF FF FF FF
+       ^^^^^^^^^^^^^^^^^^^^^^^^ all changed
+```
+
+---
+
+## Five Types of MOV Operations
+
+The text provides five examples showing all possible source-destination combinations:
+
+### 1. Immediate → Register
+```assembly
+movl $0x4050, %eax
+```
+- Source: immediate value `0x4050`
+- Destination: register `%eax`
+- Size: 4 bytes
+- Result: `%eax = 0x00004050`, and upper 32 bits of `%rax` are zeroed
+
+### 2. Register → Register
+```assembly
+movw %bp, %sp
+```
+- Source: register `%bp` (16-bit base pointer)
+- Destination: register `%sp` (16-bit stack pointer)
+- Size: 2 bytes
+- Result: Copy the 16-bit value from `%bp` to `%sp`
+
+### 3. Memory → Register
+```assembly
+movb (%rdi,%rcx), %al
+```
+- Source: memory at address `R[%rdi] + R[%rcx]` (indexed addressing)
+- Destination: register `%al` (low byte of `%rax`)
+- Size: 1 byte
+- Result:  Read 1 byte from computed memory address into `%al`
+
+**Example:** If `%rdi = 0x1000` and `%rcx = 0x5`, read from address `0x1005`
+
+### 4. Immediate → Memory
+```assembly
+movb $-17, (%esp)
+```
+- Source: immediate value `-17` (which is `0xEF` in 8-bit two's complement)
+- Destination: memory at address `R[%esp]`
+- Size: 1 byte
+- Result: Write the byte `0xEF` to the memory location pointed to by `%esp`
+
+### 5. Register → Memory
+```assembly
+movq %rax, -12(%rbp)
+```
+- Source: register `%rax`
+- Destination: memory at address `R[%rbp] - 12` (base + displacement)
+- Size: 8 bytes
+- Result: Write 8 bytes from `%rax` to memory at address `(%rbp - 12)`
+
+**Example:** If `%rbp = 0x2000`, write to address `0x2000 - 12 = 0x1FF4`
+
+---
+
+## The movabsq Instruction:  Moving Large 64-bit Immediates
+
+Regular `movq` has a limitation: immediate values must fit in 32 bits (as signed integers). The value is then sign-extended to 64 bits.
+
+**Example of limitation:**
+```assembly
+movq $0x123456789ABCDEF0, %rax    # ERROR!  Too large for regular movq
+```
+
+The `movabsq` instruction solves this: 
+- Can have any arbitrary 64-bit immediate value
+- Destination must be a register (cannot be memory)
+
+**Example:**
+```assembly
+movabsq $0x123456789ABCDEF0, %rax    # OK!  %rax = 123456789ABCDEF0
+```
+
+The "abs" stands for "absolute" - meaning the full absolute 64-bit value. 
+
+---
+
+## MOVZ Class: Move with Zero Extension
+
+These instructions copy a smaller source value to a larger destination and fill the remaining high-order bytes with zeros.
+
+The instruction name format is `movz[source_size][dest_size]`:
+- First letter after `movz`: source size (`b`=byte, `w`=word)
+- Second letter:  destination size (`w`=word, `l`=long, `q`=quad)
+
+### Available Instructions: 
+
+1. **movzbw**:  Zero-extend byte → word (1 byte → 2 bytes)
+2. **movzbl**: Zero-extend byte → long (1 byte → 4 bytes)
+3. **movzwl**: Zero-extend word → long (2 bytes → 4 bytes)
+4. **movzbq**: Zero-extend byte → quad (1 byte → 8 bytes)
+5. **movzwq**:  Zero-extend word → quad (2 bytes → 8 bytes)
+
+**Important:** Source can be register or memory, but destination must be a register.
+
+### Example:
+```assembly
+movzbq %dl, %rax
+```
+
+**Scenario:** `%dl = 0xA5` (binary: 10100101)
+
+**Result:** `%rax = 0x00000000000000A5`
+```
+Source:   1010 0101
+Result:  0000... 0000 1010 0101
+         [56 zeros]  [8 bits]
+```
+
+The high-order 56 bits are filled with zeros. 
+
+---
+
+## MOVS Class: Move with Sign Extension
+
+These instructions copy a smaller source value to a larger destination and fill the remaining high-order bytes by **sign extension** - replicating the most significant bit (sign bit) of the source.
+
+The instruction name format is `movs[source_size][dest_size]`:
+
+### Available Instructions:
+
+1. **movsbw**: Sign-extend byte → word (1 byte → 2 bytes)
+2. **movsbl**: Sign-extend byte → long (1 byte → 4 bytes)
+3. **movswl**: Sign-extend word → long (2 bytes → 4 bytes)
+4. **movsbq**: Sign-extend byte → quad (1 byte → 8 bytes)
+5. **movswq**: Sign-extend word → quad (2 bytes → 8 bytes)
+6. **movslq**: Sign-extend long → quad (4 bytes → 8 bytes)
+
+**Important:** Destination must be a register.
+
+### Example:
+```assembly
+movsbq %dl, %rax
+```
+
+**Scenario 1:** `%dl = 0x05` (binary: 00000101, positive number, MSB = 0)
+**Result:** `%rax = 0x0000000000000005`
+```
+Sign bit = 0, so fill with zeros
+```
+
+**Scenario 2:** `%dl = 0xAA` (binary: 10101010, negative number, MSB = 1)
+**Result:** `%rax = 0xFFFFFFFFFFFFFFAA`
+```
+Sign bit = 1, so fill with ones (FF repeated)
+```
+
+This preserves the sign of signed integers in two's complement representation.
+
+---
+
+## Missing Instruction: movzlq (Why it doesn't exist)
+
+You might expect a `movzlq` instruction to zero-extend a 4-byte (long) value to 8 bytes (quad). **This instruction doesn't exist** because it's not needed! 
+
+Remember the special rule: `movl` with a register destination automatically zeros the upper 4 bytes.  So `movl` already performs zero extension from 32 to 64 bits.
+
+**Instead of:**
+```assembly
+movzlq %eax, %rax    # This instruction doesn't exist
+```
+
+**Just use:**
+```assembly
+movl %eax, %rax      # This zeros the upper 32 bits automatically
+```
+
+**Example:**
+```assembly
+movl $0x12345678, %eax    # %rax = 0x0000000012345678
+```
+
+The upper 32 bits are automatically zeroed, achieving the same effect as zero extension.
+
+---
+
+## The cltq Instruction: Compact Sign Extension
+
+`cltq` is a special instruction for sign-extending `%eax` to `%rax`:
+- **No operands needed** (implicit)
+- Source: always `%eax`
+- Destination: always `%rax`
+- More compact encoding than `movslq %eax, %rax`
+
+**Example:**
+```assembly
+cltq    # Sign-extend %eax to %rax
+```
+
+If `%eax = 0x80000000` (negative in 32-bit two's complement):
+```
+Before: %rax = ? ?????? ???  80000000
+After:  %rax = FFFFFFFF 80000000
+                ^^^^^^^^ sign extended
+```
+
+If `%eax = 0x12345678` (positive):
+```
+Before: %rax = ? ????????? 12345678
+After:  %rax = 00000000 12345678
+                ^^^^^^^^ sign extended
+```
+
+---
+
+## Comparing Byte Movement Instructions:  A Detailed Example
+
+Let's compare `movb`, `movsbq`, and `movzbq`:
+
+```assembly
+movabsq $0x0011223344556677, %rax    # %rax = 0011223344556677
+movb $0xAA, %dl                       # %dl = AA
+movb %dl, %al                         # %rax = 00112233445566AA
+movsbq %dl, %rax                      # %rax = FFFFFFFFFFFFFFAA
+movzbq %dl, %rax                      # %rax = 00000000000000AA
+```
+
+### Step-by-step breakdown:
+
+**Line 1:** Initialize
+```
+%rax = 0x0011223344556677
+```
+
+**Line 2:** Load `0xAA` into `%dl`
+```
+%dl = 0xAA (binary: 10101010)
+```
+
+**Line 3:** `movb %dl, %al` - Simple byte move
+- Copies only the low byte
+- Other bytes of `%rax` unchanged
+```
+%rax = 0x00112233445566AA
+                        ^^ only this changed
+```
+
+**Line 4:** `movsbq %dl, %rax` - Sign-extended move
+- `%dl = 0xAA` has MSB = 1 (binary: 1010 1010)
+- Sign bit is 1, so fill all upper bits with 1
+```
+%rax = 0xFFFFFFFFFFFFFFAA
+       ^^^^^^^^^^^^^^ all F's (sign extension)
+                    ^^ original AA
+```
+
+In hexadecimal, `0xAA` is a negative number in 8-bit two's complement (-86 in decimal). Sign extension preserves this as a negative 64-bit number.
+
+**Line 5:** `movzbq %dl, %rax` - Zero-extended move
+- Fill all upper bits with 0
+```
+%rax = 0x00000000000000AA
+       ^^^^^^^^^^^^^^ all zeros
+                    ^^ original AA
+```
+
+Zero extension treats the source as an unsigned number. 
+
+---
+
+## Practical Use Cases
+
+### When to use movz (zero extension):
+- Working with unsigned integers
+- Array indexing (indices are unsigned)
+- Bit manipulation
+
+**Example:**
+```c
+unsigned char c = 200;
+unsigned long x = c;    // Need zero extension
+```
+```assembly
+movzbq %cl, %rax    # x = 200 (0x00000000000000C8)
+```
+
+### When to use movs (sign extension):
+- Working with signed integers
+- Preserving negative values
+
+**Example:**
+```c
+signed char c = -56;    // 0xC8 in 8-bit two's complement
+signed long x = c;      // Need sign extension
+```
+```assembly
+movsbq %cl, %rax    # x = -56 (0xFFFFFFFFFFFFFFC8)
+```
+
+---
+
+This comprehensive explanation covers all the data movement instructions, their behaviors, special cases, and the subtle but critical differences between them. Understanding these instructions is fundamental to reading and writing x86-64 assembly code, especially when dealing with data of different sizes and types. 
