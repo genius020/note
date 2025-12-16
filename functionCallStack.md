@@ -1245,3 +1245,277 @@ caller:
 5. **After return:** `%rax = 30`, execution continues in `caller`
 
 ---
+
+# The Run-Time Stack
+## Stack Frames and Procedure Calls
+
+The procedure-calling mechanism in C and most other languages takes advantage of a fundamental property of the stack data structure: **last-in, first-out (LIFO) memory management**. This property perfectly matches the way procedures are called and return in a program.
+
+---
+
+## Why Procedures Match Stack Behavior
+
+Consider the scenario where procedure P calls procedure Q. While Q is executing, procedure P is temporarily suspended—it's waiting for Q to finish. In fact, P doesn't just sit idle; it's actually paused in the middle of its own execution.  If you trace back from Q, there's an entire chain of procedure calls:  maybe some procedure R called P, and some procedure S called R, and so on, all the way back to the program's starting point (typically `main`). All of these procedures in the call chain are suspended, waiting for the procedures they called to return.
+
+The crucial observation is this: while Q is running, **only Q** needs the ability to allocate new storage for its local variables or to set up calls to other procedures. All the other procedures in the call chain (P, R, S, etc.) don't need to do anything—they're frozen in time, waiting.  When Q eventually returns, any local storage it allocated can be completely freed because Q no longer exists as an active procedure.  Then P resumes where it left off, and **P** becomes the only procedure that needs to actively manage storage.
+
+This pattern of "most recent caller is the only one doing work" is exactly what a stack provides. As P calls Q, all the information needed for that call—how to pass control to Q, what data Q needs, where Q should store its local variables—gets pushed onto the end of the stack. When Q returns to P, all of Q's information gets popped off and deallocated. The stack naturally manages this because it follows LIFO discipline.
+
+---
+
+## Stack Frame Structure
+
+In x86-64, the stack grows toward lower addresses (remember this counterintuitive fact), and the stack pointer `%rsp` always points to the top element of the stack. You can push and pop data with `pushq` and `popq`. You can also allocate uninitialized space by simply decrementing `%rsp` (moving it to a lower address), and you can deallocate that space by incrementing `%rsp` back. 
+
+When a procedure needs more storage than what fits in registers, it allocates a region on the stack called its **stack frame**. Figure 3.25 shows the general structure of the run-time stack with multiple stack frames. 
+
+The key principle is:  **the frame for the currently executing procedure is always at the top of the stack**.   This makes sense because the most recently called procedure is the one that's actively running and needs access to its storage.
+
+---
+
+## What Happens During a Procedure Call
+
+Let's trace what happens when procedure P calls procedure Q:
+
+1. **Before the call**, P is executing and P's stack frame is at the top of the stack. 
+
+2. **P prepares to call Q** by setting up arguments.  The first six integer/pointer arguments go in registers (`%rdi, %rsi, %rdx, %rcx, %r8, %r9`). If Q needs more than six arguments, P stores the extra arguments in its own stack frame, in a region that will be accessible to Q.
+
+3. **P executes `call Q`**. The `call` instruction pushes the return address onto the stack.  The return address is the memory address of the instruction in P that should execute after Q returns.  This return address is considered **part of P's stack frame** because it's state information relevant to P—it tells where P should resume. 
+
+4. **Q begins executing**. Now Q needs its own stack frame. Q's code allocates space for this frame by extending the stack boundary, which means decrementing `%rsp` to move it to a lower address.  The amount Q subtracts from `%rsp` depends on how much storage Q needs. 
+
+5. **Within Q's stack frame**, Q can do several things:
+   - Save the values of registers that Q needs to use but that should be preserved for P
+   - Allocate space for Q's local variables
+   - Set up arguments for procedures that Q might call
+
+6. **When Q finishes**, it deallocates its stack frame (typically by restoring `%rsp` to its value at entry), executes `ret` which pops the return address and jumps to it, and control returns to P right where P left off.
+
+---
+
+## Stack Frame Layout
+
+Looking at Figure 3.25, we can see the general structure from bottom to top (remember, higher addresses are shown at the top of diagrams):
+
+**Earlier frames** (procedures that called P): These are higher in memory (higher addresses). They're suspended, waiting for their called procedures to return.
+
+**P's frame** (the calling procedure):
+- **Argument 7, Argument 8, ...  Argument n**:  If P is calling Q with more than 6 arguments, the extra arguments go here, pushed before the call
+- **(Between frames)** More space if needed
+- **Return address**:  Pushed by the `call` instruction, this is where P should resume after Q returns
+
+**Q's frame** (the currently executing procedure, at stack top):
+- **Saved registers**: If Q needs to use certain registers but must preserve their values for P (callee-saved registers), Q saves them here
+- **Local variables**:  Space for Q's local variables that don't fit in registers
+- **Argument build area**: If Q calls another procedure and needs more than 6 arguments, Q stores the extra arguments here
+
+The **stack pointer %rsp** points to the very top of Q's frame (lowest address in use).
+
+---
+
+## Concrete Example
+
+Let's trace a concrete example with actual code:
+
+```c
+long add(long a, long b) {
+    return a + b;
+}
+
+long compute(long x, long y, long z) {
+    long temp1 = x * 2;
+    long temp2 = y * 3;
+    long result = add(temp1, temp2);
+    return result + z;
+}
+
+long main() {
+    return compute(5, 10, 15);
+}
+```
+
+**Initial state:** `main` is executing, and its stack frame is at the top. 
+
+**main calls compute(5, 10, 15):**
+
+```assembly
+main:
+    # Set up arguments (all fit in registers)
+    movq $5, %rdi      # First argument:  x = 5
+    movq $10, %rsi     # Second argument: y = 10
+    movq $15, %rdx     # Third argument: z = 15
+    call compute       # Push return address, jump to compute
+```
+
+After `call compute`:
+- Stack has return address (where main should resume)
+- %rsp points to this return address
+- compute begins executing
+
+**compute needs a stack frame:**
+
+```assembly
+compute:
+    pushq %rbp              # Save old frame pointer
+    movq %rsp, %rbp         # Set up new frame pointer
+    subq $16, %rsp          # Allocate 16 bytes for local variables
+```
+
+Stack now looks like (addresses are examples):
+```
+Address    Content
+0x118      [earlier frames - main's variables if any]
+0x110      Return address (where to go back in main)  ← P's frame
+0x108      Saved %rbp                                 ← Q's frame starts
+0x100      Space for local variables                  ← %rsp points here
+```
+
+**compute executes its body:**
+
+```assembly
+    # long temp1 = x * 2;
+    movq %rdi, %rax
+    addq %rax, %rax        # temp1 = x * 2 = 10
+    movq %rax, -8(%rbp)    # Store temp1 on stack
+    
+    # long temp2 = y * 3;
+    movq %rsi, %rcx
+    imulq $3, %rcx         # temp2 = y * 3 = 30
+    movq %rcx, -16(%rbp)   # Store temp2 on stack
+    
+    # Set up call to add
+    movq -8(%rbp), %rdi    # First argument: temp1 = 10
+    movq -16(%rbp), %rsi   # Second argument: temp2 = 30
+    call add               # Push return address, jump to add
+```
+
+Now the stack has three frames:
+```
+Address    Content
+0x118      [main's frame]
+0x110      Return address to main
+0x108      Saved %rbp from compute
+0x100      temp1 and temp2
+0x0F8      Return address to compute  ← add's frame
+           (more frames if add needed them)
+```
+
+**add is very simple:**
+
+```assembly
+add:
+    # No stack frame needed!  All work done in registers
+    # a in %rdi (10), b in %rsi (30)
+    movq %rdi, %rax
+    addq %rsi, %rax        # %rax = 40
+    ret                    # Pop return address, jump back to compute
+```
+
+add doesn't allocate a stack frame because: 
+- It has only 2 arguments (fit in registers)
+- It has no local variables that need the stack
+- It doesn't call any other functions
+- This is called a **leaf procedure**
+
+**add returns:** The `ret` pops the return address and jumps back to compute.
+
+**compute continues:**
+
+```assembly
+    # result is in %rax (40)
+    addq %rdx, %rax        # result + z = 40 + 15 = 55
+    
+    # Clean up and return
+    movq %rbp, %rsp        # Deallocate local variables
+    popq %rbp              # Restore old frame pointer
+    ret                    # Return to main
+```
+
+**compute returns:** Stack frame deallocated, return to main.
+
+**main continues:** Gets result in %rax (55) and can use it.
+
+---
+
+## Fixed vs.  Variable Size Frames
+
+Most procedures have **fixed-size stack frames**—the amount of space needed is determined at compile time and allocated at the beginning of the procedure. This is efficient because the compiler knows exactly how much space to allocate with a single `subq` instruction.
+
+However, some procedures need **variable-size frames**.  This happens when:
+- The procedure uses variable-length arrays (VLAs) whose size isn't known until runtime
+- The procedure uses `alloca()` to allocate stack space dynamically
+
+For example: 
+```c
+void process(int n) {
+    int array[n];   // Variable-length array - size depends on n
+    // ...  use array
+}
+```
+
+The amount of stack space needed for `array` isn't known until runtime when the value of `n` is known. Such procedures require special handling, which will be discussed later in Section 3.10.5.
+
+---
+
+## The Minimalist Principle:  Omitting Unnecessary Parts
+
+The text emphasizes that x86-64 procedures are designed for space and time efficiency. They **only allocate the portions of stack frames they actually require**. Many parts shown in Figure 3.25 are optional and can be omitted. 
+
+**Example 1: Six or fewer arguments**
+
+If a procedure has six or fewer integer/pointer arguments, they all fit in registers. The "Argument 7, 8, ...  n" portion of the caller's stack frame can be completely omitted.
+
+```c
+long func(long a, long b, long c) {  // Only 3 arguments
+    return a + b + c;
+}
+```
+
+The caller doesn't need to put anything on the stack for arguments—everything goes in registers.
+
+**Example 2: No local variables**
+
+If all local variables fit in registers, the "Local variables" portion can be omitted.
+
+```c
+long simple(long x) {
+    long y = x * 2;    // y can live in a register
+    return y;
+}
+```
+
+No stack space needed for `y`.
+
+**Example 3: No saved registers**
+
+If the procedure doesn't need to preserve any register values, the "Saved registers" portion can be omitted.
+
+**Example 4: Leaf procedures**
+
+A **leaf procedure** is one that doesn't call any other procedures. It's called a "leaf" in reference to the tree structure of procedure calls—it's at the end of a branch with no further branches. 
+
+Leaf procedures often need **no stack frame at all** if: 
+- All arguments fit in registers
+- All local variables fit in registers
+- No registers need to be saved
+
+Looking back at our examples, the `add` function is a perfect leaf procedure: 
+
+```c
+long add(long a, long b) {
+    return a + b;
+}
+```
+
+Assembly: 
+```assembly
+add:
+    movq %rdi, %rax
+    addq %rsi, %rax
+    ret
+```
+
+No stack frame!  Just three instructions. This is extremely efficient.
+
+---
