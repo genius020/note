@@ -1247,6 +1247,8 @@ caller:
 ---
 
 # The Run-Time Stack
+<img width="792" height="855" alt="image" src="https://github.com/user-attachments/assets/7de08973-823b-4a3b-944d-4e8828c026b1" /> <br>
+
 ## Stack Frames and Procedure Calls
 
 The procedure-calling mechanism in C and most other languages takes advantage of a fundamental property of the stack data structure: **last-in, first-out (LIFO) memory management**. This property perfectly matches the way procedures are called and return in a program.
