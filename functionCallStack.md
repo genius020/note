@@ -1016,3 +1016,232 @@ movsbq %cl, %rax    # x = -56 (0xFFFFFFFFFFFFFFC8)
 ---
 
 This comprehensive explanation covers all the data movement instructions, their behaviors, special cases, and the subtle but critical differences between them. Understanding these instructions is fundamental to reading and writing x86-64 assembly code, especially when dealing with data of different sizes and types. 
+
+# Procedures
+## Understanding Procedures at the Machine Level
+
+Procedures (also called functions, methods, or subroutines) are a fundamental abstraction in programming. They package code with a defined interface:  they accept arguments and optionally return a value. This allows you to hide implementation details while providing a clear, reusable interface. 
+
+---
+
+## The Three Key Mechanisms
+
+When procedure P calls procedure Q, and Q executes and returns to P, three mechanisms must work: 
+
+---
+
+### 1. Passing Control
+
+The CPU must transfer execution from P to Q, then back to P after Q finishes.
+
+**What happens:**
+- The **program counter** must jump to Q's first instruction (entry)
+- When Q finishes, the program counter must return to the instruction in P right after the call (return)
+
+**The challenge:** The CPU must remember **where to return to**—it needs to save the return address. 
+
+**Example:**
+```c
+void caller() {
+    // ...  some code
+    callee();        // Jump to callee, save return address
+    // ... continue here after callee returns
+}
+```
+
+In assembly:
+```assembly
+caller:
+    # ...  some instructions
+    call callee      # Saves return address and jumps to callee
+    # ... execution resumes here after callee returns
+```
+
+The `call` instruction:
+1. Pushes the return address (address of next instruction) onto the stack
+2. Sets program counter to the first instruction of `callee`
+
+The `ret` instruction in `callee`:
+1. Pops the return address from the stack
+2. Sets program counter to that address (returns to `caller`)
+
+---
+
+### 2. Passing Data
+
+P must send arguments to Q, and Q must return a value to P.
+
+**Arguments (P → Q):** Values passed from caller to callee  
+**Return value (Q → P):** Value passed back from callee to caller
+
+**How x86-64 does it:**
+- First 6 integer/pointer arguments go in registers:  `%rdi, %rsi, %rdx, %rcx, %r8, %r9`
+- Return value goes in register `%rax`
+- Additional arguments (beyond 6) go on the stack
+
+**Example:**
+```c
+long add(long a, long b) {
+    return a + b;
+}
+
+long caller() {
+    return add(5, 10);
+}
+```
+
+Assembly:
+```assembly
+add:
+    # a is in %rdi, b is in %rsi (passed by caller)
+    addq %rsi, %rdi
+    movq %rdi, %rax      # Put result in %rax (return value)
+    ret
+
+caller:
+    movq $5, %rdi        # First argument: 5
+    movq $10, %rsi       # Second argument: 10
+    call add
+    # After return, %rax contains 15
+    ret
+```
+
+---
+
+### 3. Allocating and Deallocating Memory
+
+Q may need space for local variables when it starts, and must free that space before returning.
+
+**Two approaches:**
+
+**Option 1: Use registers** (fastest, no memory allocation needed)
+```c
+long add(long a, long b) {
+    long sum = a + b;    // 'sum' can live in a register
+    return sum;
+}
+```
+
+**Option 2: Use the stack** (when you run out of registers or need to save values)
+```c
+long complex_function(long a, long b) {
+    long var1 = a * 2;
+    long var2 = b * 3;
+    long var3 = var1 + var2;
+    long var4 = var3 * 4;
+    // ... many more variables
+    return var4;
+}
+```
+
+For many local variables, the stack is used: 
+```assembly
+complex_function:
+    pushq %rbp           # Save old base pointer
+    movq %rsp, %rbp      # Set up new stack frame
+    subq $32, %rsp       # Allocate 32 bytes for local variables
+    
+    # ... function body uses stack space
+    
+    movq %rbp, %rsp      # Deallocate local variables
+    popq %rbp            # Restore old base pointer
+    ret
+```
+
+---
+
+## The Minimalist Strategy
+
+x86-64 follows a **"do only what's necessary"** approach for efficiency:
+
+- Procedure calls happen millions/billions of times in a program
+- Overhead must be minimized
+- Only implement mechanisms that are actually needed for each specific procedure
+
+**Examples:**
+
+**Simple procedure (minimal overhead):**
+```c
+long add(long a, long b) {
+    return a + b;
+}
+```
+- Arguments in registers ✓
+- Return value in register ✓
+- No local variables → **no stack allocation needed**
+- Just `call` and `ret` instructions
+
+**Complex procedure (uses more mechanisms):**
+```c
+long complex(long a, long b, long c) {
+    long temp1 = a * b;
+    long temp2 = b * c;
+    long temp3 = a * c;
+    helper(temp1);       // Calls another function
+    return temp1 + temp2 + temp3;
+}
+```
+- Arguments in registers ✓
+- Multiple local variables → **allocate stack space**
+- Calls another function → **save return address**
+- May need to save/restore registers
+
+---
+
+## Complete Example with All Three Mechanisms
+
+```c
+long add_and_multiply(long a, long b) {
+    long sum = a + b;
+    long result = sum * 2;
+    return result;
+}
+
+long caller() {
+    long x = 5;
+    long y = 10;
+    long answer = add_and_multiply(x, y);
+    return answer;
+}
+```
+
+**Assembly:**
+```assembly
+add_and_multiply: 
+    # MECHANISM 1: Control - entered via 'call', will exit via 'ret'
+    
+    # MECHANISM 2: Data passing - arguments in %rdi (a=5), %rsi (b=10)
+    addq %rsi, %rdi       # sum = a + b  (%rdi = 15)
+    
+    # MECHANISM 3: Memory - using registers, no stack allocation needed
+    leaq (%rdi,%rdi), %rax  # result = sum * 2  (%rax = 30)
+    
+    # MECHANISM 2: Return value in %rax (30)
+    ret                     # MECHANISM 1: Return control to caller
+
+caller:
+    # MECHANISM 2: Set up arguments
+    movq $5, %rdi           # First argument
+    movq $10, %rsi          # Second argument
+    
+    # MECHANISM 1: Transfer control
+    call add_and_multiply   # Pushes return address, jumps to function
+    
+    # Execution resumes here after return
+    # MECHANISM 2: Return value is in %rax (30)
+    
+    ret
+```
+
+**Tracing execution:**
+
+1. **Before call:** `%rdi = 5`, `%rsi = 10`
+2. **call instruction:** Pushes return address onto stack, jumps to `add_and_multiply`
+3. **Inside add_and_multiply:** 
+   - Reads arguments from `%rdi` and `%rsi`
+   - Computes result using registers (no stack needed)
+   - Puts result (30) in `%rax`
+4. **ret instruction:** Pops return address, jumps back to `caller`
+5. **After return:** `%rax = 30`, execution continues in `caller`
+
+---
